@@ -32,7 +32,7 @@ def create_employee():
             }
             try:
                 response = requests.post(f"{BASE_URL}/employees/", json=employee_data)
-                if response.status_code in [200, 201]:  # Check for both 200 and 201
+                if response.status_code in [200, 201]: 
                     st.success("Employee registered successfully!")
                 else:
                     st.error(f"Error registering employee: {response.text}")
@@ -48,7 +48,7 @@ def create_location():
             location_data = {"name": name}
             try:
                 response = requests.post(f"{BASE_URL}/locations/", json=location_data)
-                if response.status_code in [200, 201]:  # Check for both 200 and 201
+                if response.status_code in [200, 201]: 
                     st.success("Location registered successfully!")
                 else:
                     st.error(f"Error registering location: {response.text}")
@@ -166,7 +166,7 @@ def create_responsibility():
 def upload_excel():
     st.title("Upload Excel File")
     
-    # Define available tables and their required columns with Spanish column names
+
     table_options = {
         "employees": {
             "Required": ["nombre", "documento"],
@@ -227,14 +227,12 @@ def upload_excel():
         }
     }
     
-    # Create selection box for tables
     selected_table = st.selectbox(
         "Select target table:",
         options=list(table_options.keys()),
         format_func=lambda x: x.capitalize()
     )
     
-    # Show required and optional columns for selected table
     if selected_table:
         st.info(f"""
         Required columns: {', '.join(table_options[selected_table]['Required'])}
@@ -244,7 +242,7 @@ def upload_excel():
     uploaded_file = st.file_uploader("Choose Excel file", type="xlsx")
 
     if uploaded_file:
-        # Read Excel file and convert numeric phone numbers to strings
+        
         df = pd.read_excel(uploaded_file)
         if 'telefono' in df.columns:
             df['telefono'] = df['telefono'].astype(str)
@@ -253,7 +251,6 @@ def upload_excel():
         st.dataframe(df)
         
         if st.button("Upload Data"):
-            # Validate columns
             df_columns = set(df.columns)
             required_columns = set(table_options[selected_table]['Required'])
             
@@ -268,7 +265,6 @@ def upload_excel():
                 return
             
             try:
-                # Convert DataFrame to JSON and map Spanish column names to English
                 mapping = table_options[selected_table]['Mapping']
                 df_mapped = df.rename(columns=mapping)
                 records = df_mapped.to_dict('records')
@@ -280,7 +276,6 @@ def upload_excel():
                 status_text = st.empty()
                 
                 for i, record in enumerate(records):
-                    # Clean NaN values
                     record = {k: (v if pd.notna(v) else None) for k, v in record.items()}
                     
                     try:
