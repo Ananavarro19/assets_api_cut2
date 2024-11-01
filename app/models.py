@@ -3,6 +3,7 @@ from datetime import date
 from typing import Optional
 
 class EmployeeCreate(BaseModel):
+    id_funcionario: Optional[int] = None
     name: str
     document: str
     email: Optional[EmailStr] = None
@@ -15,7 +16,7 @@ class AssetTypeCreate(BaseModel):
     type: str
 
 class AssetCreate(BaseModel):
-    asset_id: int
+    asset_id: Optional[int] = None
     type_id: int
     location_id: int
     model_id: int

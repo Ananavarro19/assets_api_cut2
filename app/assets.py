@@ -1,4 +1,3 @@
-
 import streamlit as st
 import requests
 from streamlit_option_menu import option_menu
@@ -10,8 +9,8 @@ st.sidebar.title("Navigation")
 with st.sidebar:
     selected = option_menu(
         "Insert Data",
-        ["Employees", "Locations", "Asset Types", "Assets", "Brands", "Models", "Responsibilities", "Upload Excel"],
-        icons=["person-plus", "map", "clipboard-plus", "box", "tag", "puzzle", "briefcase", "file-earmark-excel"],
+        ["Employees", "Locations", "Asset Types", "Assets", "Brands", "Models", "Responsibilities", "Upload Excel", "Queries"],
+        icons=["person-plus", "map", "clipboard-plus", "box", "tag", "puzzle", "briefcase", "file-earmark-excel", "search"],
         menu_icon="cast",
         default_index=0
     )
@@ -33,7 +32,7 @@ def create_employee():
             }
             try:
                 response = requests.post(f"{BASE_URL}/employees/", json=employee_data)
-                if response.status_code == 200:
+                if response.status_code in [200, 201]:  # Check for both 200 and 201
                     st.success("Employee registered successfully!")
                 else:
                     st.error(f"Error registering employee: {response.text}")
@@ -49,7 +48,7 @@ def create_location():
             location_data = {"name": name}
             try:
                 response = requests.post(f"{BASE_URL}/locations/", json=location_data)
-                if response.status_code == 200:
+                if response.status_code in [200, 201]:  # Check for both 200 and 201
                     st.success("Location registered successfully!")
                 else:
                     st.error(f"Error registering location: {response.text}")
@@ -75,7 +74,6 @@ def create_asset_type():
 def create_asset():
     st.title("Register Asset")
     with st.form(key="asset_form"):
-        asset_id = st.number_input("Asset ID", min_value=1)
         type_id = st.number_input("Type ID", min_value=1)
         location_id = st.number_input("Location ID", min_value=1)
         model_id = st.number_input("Model ID", min_value=1)
@@ -87,7 +85,6 @@ def create_asset():
         submit_button = st.form_submit_button(label="Register Asset")
         if submit_button:
             asset_data = {
-                "asset_id": asset_id,
                 "type_id": type_id,
                 "location_id": location_id,
                 "model_id": model_id,
@@ -168,38 +165,177 @@ def create_responsibility():
 
 def upload_excel():
     st.title("Upload Excel File")
-    uploaded_file = st.file_uploader("Choose an Excel file", type="xlsx")
+    
+    # Define available tables and their required columns with Spanish column names
+    table_options = {
+        "employees": {
+            "Required": ["nombre", "documento"],
+            "Optional": ["correo", "telefono"],
+            "Mapping": {
+                "nombre": "name",
+                "documento": "document",
+                "correo": "email",
+                "telefono": "phone"
+            }
+        },
+        "locations": {
+            "Required": ["nombre"],
+            "Optional": [],
+            "Mapping": {"nombre": "name"}
+        },
+        "asset_types": {
+            "Required": ["tipo"],
+            "Optional": [],
+            "Mapping": {"tipo": "type"}
+        },
+        "assets": {
+            "Required": ["id_tipo", "id_ubicacion", "id_modelo"],
+            "Optional": ["n_parte", "serial", "procesador", "disco_duro", "memoria_ram"],
+            "Mapping": {
+                "id_tipo": "type_id",
+                "id_ubicacion": "location_id",
+                "id_modelo": "model_id",
+                "n_parte": "part_number",
+                "serial": "serial",
+                "procesador": "processor",
+                "disco_duro": "hard_drive",
+                "memoria_ram": "ram"
+            }
+        },
+        "brands": {
+            "Required": ["marca"],
+            "Optional": [],
+            "Mapping": {"marca": "brand"}
+        },
+        "models": {
+            "Required": ["modelo", "id_marca"],
+            "Optional": [],
+            "Mapping": {
+                "modelo": "model",
+                "id_marca": "brand_id"
+            }
+        },
+        "responsibilities": {
+            "Required": ["id_activo", "id_funcionario", "fecha_asignacion"],
+            "Optional": ["fecha_fin"],
+            "Mapping": {
+                "id_activo": "asset_id",
+                "id_funcionario": "employee_id",
+                "fecha_asignacion": "assignment_date",
+                "fecha_fin": "end_date"
+            }
+        }
+    }
+    
+    # Create selection box for tables
+    selected_table = st.selectbox(
+        "Select target table:",
+        options=list(table_options.keys()),
+        format_func=lambda x: x.capitalize()
+    )
+    
+    # Show required and optional columns for selected table
+    if selected_table:
+        st.info(f"""
+        Required columns: {', '.join(table_options[selected_table]['Required'])}
+        Optional columns: {', '.join(table_options[selected_table]['Optional'])}
+        """)
+    
+    uploaded_file = st.file_uploader("Choose Excel file", type="xlsx")
 
-    if uploaded_file is not None:
+    if uploaded_file:
+        # Read Excel file and convert numeric phone numbers to strings
         df = pd.read_excel(uploaded_file)
-        st.write("Excel File Content:")
+        if 'telefono' in df.columns:
+            df['telefono'] = df['telefono'].astype(str)
+        
+        st.write("Preview of uploaded data:")
         st.dataframe(df)
-        table_options = ["employees", "locations", "asset_types", "assets", "brands", "models", "responsibilities"]
-        selected_table = st.selectbox("Select the table to insert data:", table_options)
+        
         if st.button("Upload Data"):
-            files = {"file": uploaded_file.getvalue()}
-            response = requests.post(f"{BASE_URL}/upload-excel/?table={selected_table}", files=files)
-            if response.status_code == 200:
-                st.success("Data uploaded successfully!")
-            else:
-                st.error(f"Error uploading data: {response.text}")
+            # Validate columns
+            df_columns = set(df.columns)
+            required_columns = set(table_options[selected_table]['Required'])
+            
+            if not required_columns.issubset(df_columns):
+                missing_cols = required_columns - df_columns
+                st.error(f"Missing required columns: {', '.join(missing_cols)}")
+                st.info(f"""
+                Please ensure your Excel file has these column names in Spanish:
+                Required: {', '.join(table_options[selected_table]['Required'])}
+                Optional: {', '.join(table_options[selected_table]['Optional'])}
+                """)
+                return
+            
+            try:
+                # Convert DataFrame to JSON and map Spanish column names to English
+                mapping = table_options[selected_table]['Mapping']
+                df_mapped = df.rename(columns=mapping)
+                records = df_mapped.to_dict('records')
+                
+                success_count = 0
+                error_count = 0
+                
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                for i, record in enumerate(records):
+                    # Clean NaN values
+                    record = {k: (v if pd.notna(v) else None) for k, v in record.items()}
+                    
+                    try:
+                        response = requests.post(f"{BASE_URL}/{selected_table}/", json=record)
+                        if response.status_code in [200, 201]:
+                            success_count += 1
+                        else:
+                            error_count += 1
+                            st.error(f"Error in row {i+1}: {response.text}")
+                    except requests.RequestException as e:
+                        error_count += 1
+                        st.error(f"Connection error in row {i+1}: {str(e)}")
+                    
+                    progress_bar.progress((i+1) / len(records))
+                    status_text.text(f"Uploaded {i+1} rows, {success_count} successful, {error_count} errors")
+                
+                st.success(f"Data uploaded successfully to {selected_table}!")
+            except requests.RequestException as e:
+                st.error(f"Connection error: {str(e)}")
 
-def validate_dataframe(df, table_name):
-    if table_name == "employees":
-        return set(df.columns) == {"name", "document", "email", "phone"}
-    elif table_name == "locations":
-        return set(df.columns) == {"name"}
-    elif table_name == "asset_types":
-        return set(df.columns) == {"type"}
-    elif table_name == "assets":
-        return set(df.columns) == {"asset_id", "type_id", "location_id", "model_id", "part_number", "serial", "processor", "hard_drive", "ram"}
-    elif table_name == "brands":
-        return set(df.columns) == {"brand"}
-    elif table_name == "models":
-        return set(df.columns) == {"model", "brand_id"}
-    elif table_name == "responsibilities":
-        return set(df.columns) == {"asset_id", "employee_id", "assignment_date", "end_date"}
-    return False
+def show_queries():
+    st.title("Asset Management Queries")
+    
+    queries = [
+        "1. Total assets by type",
+        "2. Assets currently assigned to employees",
+        "3. Unassigned assets",
+        "4. Assets by location",
+        "5. Employee assignment history",
+        "6. Assets by brand and model",
+        "7. Expired assignments",
+        "8. Assets by processor type",
+        "9. Assets by RAM capacity",
+        "10. Assets by hard drive capacity",
+        "11. Employees with multiple assets",
+        "12. Location with most assets",
+        "13. Most common asset type",
+        "14. Assets by assignment date",
+        "15. Brand distribution analysis"
+    ]
+    
+    selected_query = st.selectbox("Select a query:", queries)
+    
+    if st.button("Execute Query"):
+        try:
+            response = requests.get(f"{BASE_URL}/queries/{queries.index(selected_query) + 1}")
+            if response.status_code == 200:
+                data = response.json()
+                st.write("Query Results:")
+                df = pd.DataFrame(data)
+                st.dataframe(df)
+            else:
+                st.error(f"Error executing query: {response.text}")
+        except requests.RequestException as e:
+            st.error(f"Connection error: {str(e)}")
 
 if selected == "Employees":
     create_employee()
@@ -217,3 +353,5 @@ elif selected == "Responsibilities":
     create_responsibility()
 elif selected == "Upload Excel":
     upload_excel()
+elif selected == "Queries":
+    show_queries()

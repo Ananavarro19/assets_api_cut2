@@ -1,5 +1,5 @@
 CREATE TABLE funcionarios (
-    id_funcionario INT PRIMARY KEY,
+    id_funcionario INT PRIMARY KEY AUTO_INCREMENT,
     nombre VARCHAR(100) NOT NULL,
     documento VARCHAR(20) NOT NULL UNIQUE,
     correo VARCHAR(100),
@@ -17,7 +17,7 @@ CREATE TABLE tipos_activo (
 );
 
 CREATE TABLE activos (
-    id_activo INT PRIMARY KEY,
+    id_activo INT PRIMARY KEY AUTO_INCREMENT,
     id_tipo INT,
     id_ubicacion INT,
     id_modelo INT,
